@@ -1,133 +1,78 @@
-import streamlit as st
-from pymongo import MongoClient
-import bcrypt
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
-# -------------------------------
-# MongoDB Connection
-# -------------------------------
-client = MongoClient("mongodb://localhost:27017/")
-db = client["shopping_portal"]
-users = db["users"]
-products = db["products"]
-orders = db["orders"]
 
-# -------------------------------
-# Authentication Functions
-# -------------------------------
-def create_user(username, password, role):
-    if users.find_one({"username": username}):
-        st.warning("User already exists!")
-        return
-    hashed_pw = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-    users.insert_one({"username": username, "password": hashed_pw, "role": role})
-    st.success(f"User '{username}' created successfully as {role}!")
+# Create 20 Sample Employee Records
 
-def login_user(username, password):
-    user = users.find_one({"username": username})
-    if user and bcrypt.checkpw(password.encode('utf-8'), user["password"]):
-        return user
-    return None
+np.random.seed(42)
 
-# -------------------------------
-# Admin Page
-# -------------------------------
-def admin_page():
-    st.title("🛒 Admin Dashboard")
-    st.subheader("Manage Users and Products")
+data = {
+    "Employee_ID": range(1, 21),
+    "Name": [f"Employee_{i}" for i in range(1, 21)],
+    "Department": np.random.choice(["HR", "Finance", "Sales", "IT", "Marketing"], 20),
+    "Experience_Years": np.random.randint(1, 15, 20),
+    "Monthly_Salary": np.random.randint(30000, 100000, 20),
+    "Performance_Score": np.random.randint(1, 10, 20),
+    "Leaves_Taken": np.random.randint(0, 12, 20)
+}
 
-    # Add user
-    st.write("### ➕ Create New User")
-    new_user = st.text_input("Username")
-    new_pass = st.text_input("Password", type="password")
-    role = st.selectbox("Role", ["user", "admin"])
-    if st.button("Create User"):
-        create_user(new_user, new_pass, role)
+df = pd.DataFrame(data)
 
-    # Add products
-    st.write("### 📦 Add Product")
-    product_name = st.text_input("Product Name")
-    product_price = st.number_input("Product Price", min_value=0)
-    if st.button("Add Product"):
-        products.insert_one({"name": product_name, "price": product_price})
-        st.success(f"Product '{product_name}' added successfully!")
 
-    # Show products
-    st.write("### 🧾 Product List")
-    for prod in products.find():
-        st.write(f"🛍 {prod['name']} — ₹{prod['price']}")
+# Export to CSV
 
-# -------------------------------
-# User Page
-# -------------------------------
-def user_page(username):
-    st.title(f"Welcome, {username} 👋")
-    st.subheader("🛍 Available Products")
+df.to_csv("employee_data.csv", index=False)
+print("✅ Sample data exported to employee_data.csv")
 
-    all_products = list(products.find())
-    if not all_products:
-        st.info("No products available yet.")
-        return
 
-    for prod in all_products:
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.write(f"{prod['name']}** — ₹{prod['price']}")
-        with col2:
-            if st.button(f"Buy {prod['name']}", key=prod['_id']):
-                orders.insert_one({"username": username, "product": prod['name'], "price": prod['price']})
-                st.success(f"You bought {prod['name']}!")
+# Data Cleaning + Transformation
 
-    # Order history
-    st.write("### 🧾 Your Orders")
-    user_orders = list(orders.find({"username": username}))
-    if user_orders:
-        for order in user_orders:
-            st.write(f"- {order['product']} — ₹{order['price']}")
-    else:
-        st.info("You have no orders yet.")
 
-# -------------------------------
-# Login Page
-# -------------------------------
-def login_page():
-    st.title("🛍 Shopping Portal Login")
-    st.write("Please login to continue")
+# Load again (simulate real-world workflow)
+df = pd.read_csv("employee_data.csv")
 
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
+# Check for missing values
+print("\nMissing Values:\n", df.isnull().sum())
 
-    if st.button("Login"):
-        user = login_user(username, password)
-        if user:
-            st.session_state["user"] = user
-            st.success(f"Welcome {user['username']}!")
-        else:
-            st.error("Invalid username or password.")
+# Clean: Add column for Annual Salary
+df["Annual_Salary"] = df["Monthly_Salary"] * 12
 
-# -------------------------------
-# Main App Logic
-# -------------------------------
-def main():
-    st.sidebar.title("Navigation")
+# Transformation: Create performance category
+df["Performance_Level"] = pd.cut(df["Performance_Score"],
+                                 bins=[0, 3, 6, 10],
+                                 labels=["Low", "Medium", "High"])
 
-    if "user" not in st.session_state:
-        page = "login"
-    else:
-        page = st.sidebar.radio("Go to", ["Home", "Logout"])
+# Clean: Remove any duplicate rows
+df.drop_duplicates(inplace=True)
 
-    if page == "login":
-        login_page()
+print("\nCleaned & Transformed Data:\n", df.head())
 
-    elif page == "Home":
-        user = st.session_state["user"]
-        if user["role"] == "admin":
-            admin_page()
-        else:
-            user_page(user["username"])
+# Analysis & Visualization
 
-    elif page == "Logout":
-        st.session_state.pop("user", None)
-        st.success("Logged out successfully!")
+# 1. Average salary by department
+dept_salary = df.groupby("Department")["Monthly_Salary"].mean()
+print("\nAverage Salary by Department:\n", dept_salary)
 
-if _name_ == "_main_":
-    main()
+# 2. Experience vs Performance scatter plot
+plt.figure()
+plt.scatter(df["Experience_Years"], df["Performance_Score"], s=100, alpha=0.7)
+plt.title("Experience vs Performance Score")
+plt.xlabel("Experience (Years)")
+plt.ylabel("Performance Score")
+plt.grid(True)
+plt.show()
+
+# 3. Bar chart of average salary by department
+dept_salary.plot(kind="bar", figsize=(8, 5))
+plt.title("Average Salary by Department")
+plt.xlabel("Department")
+plt.ylabel("Average Monthly Salary")
+plt.show()
+
+# 4. Pie chart for Performance Level Distribution
+performance_counts = df["Performance_Level"].value_counts()
+plt.figure(figsize=(5, 5))
+plt.pie(performance_counts, labels=performance_counts.index, autopct="%1.1f%%", startangle=90)
+plt.title("Performance Level Distribution")
+plt.show()
